@@ -1,0 +1,3 @@
+[submodule "accel-sim-framework"]
+	path = accel-sim-framework
+	url = git@github.com:alimpfard/accel-sim.git
