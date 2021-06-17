@@ -4,13 +4,13 @@ library(reshape2)
 library(ggplot2)
 library(scales)
 
-setwd("/windata/research/results")
+setwd("/windata/research/run")
 
 clamp_to_limit <- function(x) {
     ifelse(x < 2, x, '2 or more')
 }
 
-data <- read.csv('all') %>%
+data <- read.csv('result.csv', sep = ';') %>%
     na.exclude %>%
     map(clamp_to_limit)
 
