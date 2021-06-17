@@ -2,38 +2,37 @@ Broom memoryLimit: 20 * 1024 * 1024 * 1024.
 
 var getWarps is {:a
     Pen writeln: 'Parsing traces for ' + a.
-
     var cache is File new: 'cache-' + (a path replace: '/' with: '_').
     cache exists ifTrue: {
         ^cache read eval.
     }.
     var warps is Map new.
-    var currentWarp is Nil.
+        var currentWarp is Nil.
         x
-            generateLines
-            each: {:i:x
-                i mod: 20, = 0 ifTrue: {
-                    Pen write: '\b\b\b\b\b\b\b\b' + i.
-                }.
-    Broom noGC: {
-                x is x trim.
-                x startsWith: '#', continue.
-                x startsWith: '-', continue.
-                x startsWith: 'warp =', ifTrue: {
-                    var warp is x split: ' = ', last toNumber.
-                    currentWarp is warp.
-                    warps put: Map new at: currentWarp.
-                } ifFalse: {
-                    var splits is x split: ' ' max: 7.
-                    splits count = 8 ifTrue: {
-                        warps
-                            at: currentWarp,
-                            put: splits @ 7
-                             at: splits @ 4.
-                    }.
-                }.
-    }.
+        generateLines
+        each: {:i:x
+            i mod: 20, = 0 ifTrue: {
+                Pen write: '\b\b\b\b\b\b\b\b' + i.
             }.
+            Broom noGC: {
+                x is x trim.
+                    x startsWith: '#', continue.
+                    x startsWith: '-', continue.
+                    x startsWith: 'warp =', ifTrue: {
+                        var warp is x split: ' = ', last toNumber.
+                        currentWarp is warp.
+                        warps put: Map new at: currentWarp.
+                    } ifFalse: {
+                        var splits is x split: ' ' max: 7.
+                            splits count = 8 ifTrue: {
+                            warps
+                                at: currentWarp,
+                                put: splits @ 7
+                                 at: splits @ 4.
+                            }.
+                    }.
+            }.
+        }.
     Pen write: '\b\b\b\b\b\b\b\b'.
     cache write: warps toString.
     ^warps.
@@ -50,7 +49,6 @@ var allTraces is {:dir
 
 var ResultFile is Object cnew: {
     genAccessors: ['name', 'file', 'traces'].
-
     on: 'new:' do: {:name
         ^cnew: {
             name => name.
@@ -89,68 +87,68 @@ Generator on: 'then:' do: {:self:x
 }.
 
 Generator of: (File
-        list: 'res',
-        filter: \:_:x x @ 'type' = 'file',
-        filter: (\:_:x x @ 'file' containsPattern: '^\\w+$')),
-        filter: (\:_:x File new: x @ 'file' + '.res', exists not),
-        each_v: {:x
-            Pen writeln: 'Processing ' + (x @ 'file').
-            var res is ResultFile new: x @ 'file'.
-            var outfile is File new: res name + '.res'.
-            outfile open: 'w+'.
-            var lastPC is 0.
-            res file read
-                reSplitGen: '\n',
-                imap: {:i:line
-                Broom noGC: {
-                    i mod: 20, = 0 ifTrue: {
-                        Pen write: '\b\b\b\b\b\b\b\b' + i.
-                    }.
-                    var parts is line
-                        split: ', ',
-                        fmap: \:x (x replace: 'at' with: '='),
-                        fmap: \:x (x split: ' = ', last).
-                    parts count = 4 ifTrue: {
-                        var warp is (parts @ 0) toNumber.
-                        var readNum is (parts @ 2) toNumber.
-                        var writeNum is (parts @ 1) toNumber.
-                        var rkey is readNum toStringInBase: 16, paddingLeft: 4, replace: ' ' with: '0'.
-                        var wkey is writeNum toStringInBase: 16, paddingLeft: 4, replace: ' ' with: '0'.
-                        var wentry is Nil.
-                        var rentry is Nil.
-                        var kernel is 0.
-                        {
-                            var entry is res traces @ kernel @ warp.
-                            entry isNil not ifTrue: {
-                                wentry is entry @ wkey.
-                                rentry is entry @ rkey.
-                                (wentry isNil | rentry isNil) not ifTrue: {
-                                    wentry contains: 'LD', ifTrue: {
-                                        var reg is wentry split: ' ' max: 1, head.
-                                        rentry contains: reg + ' ', break.
-                                    }.
-                                }.
-                            }.
-                            wentry is Nil.
-                            rentry is Nil.
-                            kernel +=: 1.
-                            res traces count <=: kernel, ifTrue: {
-                                kernel is 0.
-                                True break.
-                            }.
-                        } forever.
-                        (wentry isNil | rentry isNil) continue.
-                        wentry is wentry split: ' ' max: 2, tail head.
-                        rentry is rentry startsWith: 'R', either: {
-                                ^rentry split: ' ' max: 2, tail head.
-                            } or: {
-                                ^rentry split: ' ' max: 1, head.
-                            }.
-                        outfile write: 'kernel %d, warp %d\n\twrite: %s\n\tread: %s\n\n' % [kernel, warp, wentry, rentry].
-                    }.
-                }.
-                },
-                each_v: {}.
-            outfile close.
-            Pen write: '\b\b\b\b\b\b\b\b'.
-        }.
+    list: 'res',
+    filter: \:_:x x @ 'type' = 'file',
+    filter: (\:_:x x @ 'file' containsPattern: '^\\w+$')),
+    filter: (\:_:x File new: x @ 'file' + '.res', exists not),
+    each_v: {:x
+      Pen writeln: 'Processing ' + (x @ 'file').
+      var res is ResultFile new: x @ 'file'.
+      var outfile is File new: res name + '.res'.
+      outfile open: 'w+'.
+      var lastPC is 0.
+      res file read
+      reSplitGen: '\n',
+      imap: {:i:line
+          Broom noGC: {
+              i mod: 20, = 0 ifTrue: {
+                  Pen write: '\b\b\b\b\b\b\b\b' + i.
+              }.
+              var parts is line
+                  split: ', ',
+                  fmap: \:x (x replace: 'at' with: '='),
+                  fmap: \:x (x split: ' = ', last).
+                  parts count = 4 ifTrue: {
+                      var warp is (parts @ 0) toNumber.
+                      var readNum is (parts @ 2) toNumber.
+                      var writeNum is (parts @ 1) toNumber.
+                      var rkey is readNum toStringInBase: 16, paddingLeft: 4, replace: ' ' with: '0'.
+                      var wkey is writeNum toStringInBase: 16, paddingLeft: 4, replace: ' ' with: '0'.
+                      var wentry is Nil.
+                      var rentry is Nil.
+                      var kernel is 0.
+                      {
+                          var entry is res traces @ kernel @ warp.
+                          entry isNil not ifTrue: {
+                              wentry is entry @ wkey.
+                              rentry is entry @ rkey.
+                              (wentry isNil | rentry isNil) not ifTrue: {
+                                  wentry contains: 'LD', ifTrue: {
+                                      var reg is wentry split: ' ' max: 1, head.
+                                      rentry contains: reg + ' ', break.
+                                  }.
+                              }.
+                          }.
+                          wentry is Nil.
+                          rentry is Nil.
+                          kernel +=: 1.
+                          res traces count <=: kernel, ifTrue: {
+                              kernel is 0.
+                              True break.
+                          }.
+                      } forever.
+                      (wentry isNil | rentry isNil) continue.
+                      wentry is wentry split: ' ' max: 2, tail head.
+                      rentry is rentry startsWith: 'R', either: {
+                          ^rentry split: ' ' max: 2, tail head.
+                      } or: {
+                          ^rentry split: ' ' max: 1, head.
+                      }.
+                      outfile write: 'kernel %d, warp %d\n\twrite: %s\n\tread: %s\n\n' % [kernel, warp, wentry, rentry].
+                  }.
+          }.
+      },
+      each_v: {}.
+    outfile close.
+    Pen write: '\b\b\b\b\b\b\b\b'.
+}.
