@@ -13,13 +13,14 @@ WORKDIR /accel-sim-framework
 RUN bash -c "source gpu-simulator/setup_environment.sh && \
     make -j -C gpu-simulator"
 
-RUN bash travis.sh
+ENTRYPOINT ["bash", "ptx.sh"]
 
-FROM alpine
-COPY --from=0 /results /results
-WORKDIR /results
-RUN sh -c 'for f in *; do mv $f $(echo $f | sed -e "s/-.*//g"); done'
-RUN sh -c 'paste -d\; * > all.csv'
-RUN sh -c 'ls * | sed -e "/\\W/d" | xargs echo | sed -e "s/ /,/g" > header.csv'
-RUN cat header.csv all.csv > result.csv
-COPY --from=0 /traces /results/traces
+#RUN bash travis.sh
+#FROM alpine
+#COPY --from=0 /results /results
+#WORKDIR /results
+#RUN sh -c 'for f in *; do mv $f $(echo $f | sed -e "s/-.*//g"); done'
+#RUN sh -c 'paste -d\; * > all.csv'
+#RUN sh -c 'ls * | sed -e "/\\W/d" | xargs echo | sed -e "s/ /,/g" > header.csv'
+#RUN cat header.csv all.csv > result.csv
+#COPY --from=0 /traces /results/traces
