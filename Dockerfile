@@ -15,7 +15,8 @@ RUN bash -c "source gpu-simulator/setup_environment.sh && \
 
 # ENTRYPOINT ["bash", "ptx.sh"]
 
-RUN bash ptx.sh
+COPY env env
+RUN bash -c 'source ./env && source ptx.sh'
 
 # FROM alpine
 # COPY --from=0 /results /results

@@ -1,0 +1,51 @@
+import Library/Data/Generator.
+import Library/Data/Json.
+var name is Program argument: 2, split: '/', last reSplit: '-rodinia', head.
+var withoutData is (File new: (Program argument: 2), read reSplit: 'kernel_name =').
+var withData is    (File new: (Program argument: 3), read reSplit: 'kernel_name =').
+var with1Data is   (File new: (Program argument: 4), read reSplit: 'kernel_name =').
+var filter is      Program argument: 5, or: '.*'.
+var result is      Map new put: Array < Map new at: name.
+var data is        result @ name.
+
+Generator from: 0 to: withoutData count - 1, each_v: {:idx
+    var with is withData @ idx.
+    var with1 is with1Data @ idx.
+    var without is withoutData @ idx.
+    var withParams is with split: '\n', foldl: ({:acc:x
+        var y is x split: ' = '.
+        y count < 2 ifTrue: { ^acc. }.
+        ^acc put: y @ 1 at: y @ 0.
+    }) accumulator: Map new.
+    var withoutParams is without split: '\n', foldl: ({:acc:x
+        var y is x split: ' = '.
+        y count < 2 ifTrue: { ^acc. }.
+        ^acc put: y @ 1 at: y @ 0.
+    }) accumulator: Map new.
+    var with1Params is with1 split: '\n', foldl: ({:acc:x
+        var y is x split: ' = '.
+        y count < 2 ifTrue: { ^acc. }.
+        ^acc put: y @ 1 at: y @ 0.
+    }) accumulator: Map new.
+
+    var entries is data last.
+    withParams each: {:k
+        k containsPattern: filter, not continue.
+        var with is withParams @ k.
+        var without is withoutParams @ k.
+        var with1 is with1Params @ k.
+        var old is entries at: k, or: [0, 0, 0].
+        entries put: [old head + with toNumber, old @ 1 + with1 toNumber, old last + without toNumber] at: k.
+    }.
+}.
+
+result is Json serialize: result.
+
+var resultsFile is File new: 'power-results.json'.
+resultsFile exists ifFalse: {
+    resultsFile write: '{}'.
+}.
+
+var jq is Shell open: 'jq -s ".[1] + .[0]" /dev/stdin power-results.json' mode: 'w'.
+jq write: result.
+jq close.
