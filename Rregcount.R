@@ -16,5 +16,5 @@ bp <- ggplot(df, aes(x=factor(cat), y=value, fill=variable)) +
   geom_bar(stat = 'identity', position='stack') +
   facet_wrap(~ L1, scales = "free_y") +
   labs(x="category")
-ggsave("power.pdf")
+ggsave("register_count.pdf")
 
