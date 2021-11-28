@@ -1,2 +1,2 @@
 export REG2MEM=1
-export REG2MEM_MAX_OP_COUNT=1
+#export REG2MEM_MAX_OP_COUNT=1
