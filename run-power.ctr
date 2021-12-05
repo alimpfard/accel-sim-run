@@ -1,0 +1,13 @@
+var dirs is [(Program argument: i),, (i: (Generator from: 2 to: Program argCount - 1))].
+var names is File list: dirs head, fmap: {:x
+    (x @ 'file' = '.') continue.
+    (x @ 'type' = 'file') not continue.
+    x @ 'file' endsWith: 'power-report', not continue.
+    ^x @ 'file'.
+}.
+
+names each_v: {:name
+    var paths is dirs fmap: \:x x + '/' + name.
+    Shell bash: '-c "ctr correlate-power.ctr ' + (paths join: ' ') + ' avg_REG > a.json"'.
+    File new: 'power-results.json', write: (File new: 'a.json', read split: '\n', init join: '\n').
+}.

@@ -17,3 +17,7 @@ resolve:
 dumps: dump_docker
 	rm -fr out_dumps
 	sh -c 'hash=$$(docker create -t anothertest/accel-sim-dumps); docker cp $$hash:/dumps out_dumps; docker rm $$hash'
+
+clean:
+	docker container prune -f
+	docker image prune -f

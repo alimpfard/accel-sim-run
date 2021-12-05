@@ -1,5 +1,9 @@
 FROM anothertest/accel-sim-framework
 
+COPY used-registers.xsv           /accel-sim-framework/used-registers.xsv
+COPY regfile-vs-shmem-access.xsv  /accel-sim-framework/regfile-vs-shmem-access.xsv
+COPY ptx.sh                       /accel-sim-framework/ptx.sh
+
 RUN echo -e 'export REG2MEM=1\n#export REG2MEM_MAX_OP_COUNT=1' > env
 RUN bash -c 'source ./env && source ptx.sh'
 
