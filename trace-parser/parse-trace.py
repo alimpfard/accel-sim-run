@@ -4,18 +4,23 @@ from pathlib import Path
 from itertools import groupby
 from dataclasses import dataclass
 from collections import Counter
+from multiprocessing import Pool
+from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 
 
 AT_LOCAL = False
 
 
-def parse_one_warp(it: Iterator[str], warp_id: int) -> Iterator[Tuple[int, int, List[str], str, List[str], bool, int]]:
+def parse_one_warp(
+    it: Iterator[str], warp_id: int
+) -> Iterator[Tuple[int, int, List[str], str, List[str], bool, int]]:
     for line in it:
-        if line.strip() == '':
+        if line.strip() == "":
             continue
-        if line.startswith('#'):
+        if line.startswith("#"):
             continue
-        parts = line.split(' ')
+        parts = line.split(" ")
         if AT_LOCAL:
             parts = parts[4:]
         pc = int(parts[0], 16)
@@ -33,19 +38,21 @@ def parse_one_warp(it: Iterator[str], warp_id: int) -> Iterator[Tuple[int, int, 
             src_regs.append(parts[i])
         is_memory_op = parts[i] != 0
         yield pc, flags, dst_regs, op, src_regs, is_memory_op, warp_id
-        if op.lower() == 'exit':
+        if op.lower() == "exit":
             break
 
 
-def parse_trace(it: Iterator[str]) -> Iterator[Iterator[Tuple[int, int, List[str], str, List[str], bool, int]]]:
+def parse_trace(
+    it: Iterator[str],
+) -> Iterator[Iterator[Tuple[int, int, List[str], str, List[str], bool, int]]]:
     while True:
         try:
             line = next(it)
         except StopIteration:
             break
-        if not line.startswith('warp = '):
+        if not line.startswith("warp = "):
             continue
-        warp_id = int(line.split(' = ')[1])
+        warp_id = int(line.split(" = ")[1])
         _ = next(it)
         yield parse_one_warp(it, warp_id)
 
@@ -56,7 +63,11 @@ class MT:
     instruction: Tuple[int, int, List[str], str, List[str], bool, int]
 
 
-def find_reg2mem_opportunities(it: Iterator[Tuple[int, int, List[str], str, List[str], bool, int]], seen_registers: Set[str], seen_registers_reg2mem: Set[str]) -> Iterator[Tuple[int, int, List[str], str, List[str], bool, int]]:
+def find_reg2mem_opportunities(
+    it: Iterator[Tuple[int, int, List[str], str, List[str], bool, int]],
+    seen_registers: Set[str],
+    seen_registers_reg2mem: Set[str],
+) -> Iterator[Tuple[int, int, List[str], str, List[str], bool, int]]:
     # Mapping from register to read count and memory instruction
     instructions_to_consider: Dict[str, MT] = {}
 
@@ -84,8 +95,8 @@ def find_reg2mem_opportunities(it: Iterator[Tuple[int, int, List[str], str, List
             seen_registers_reg2mem.update(src_regs)
             continue
 
-        opcode_parts = op.lower().split('.')
-        if opcode_parts[0] == 'lds':
+        opcode_parts = op.lower().split(".")
+        if opcode_parts[0] == "lds":
             mt = MT(0, (pc, flags, dst_regs, op, src_regs, is_memory_op, warp_id))
             for reg in dst_regs:
                 instructions_to_consider[reg] = mt
@@ -98,38 +109,69 @@ def find_reg2mem_opportunities(it: Iterator[Tuple[int, int, List[str], str, List
 
 
 def discover_kernel_traces(base_path: Path) -> Iterator[List[Path]]:
-    for _, group in groupby(base_path.rglob('*.traceg'), lambda x: x.parent.parent.parent.name):
+    for _, group in groupby(
+        base_path.rglob("*.traceg"), lambda x: x.parent.parent.parent.name
+    ):
         yield list(group)
+
+
+def run(args):
+    i, trace_path, count = args
+    totals = {}
+    with open(trace_path, "r") as f:
+        # print(
+        #     f"Now processing {trace_path} ({i} of {count} in this set) ..."
+        # )
+        for it in parse_trace(f):
+            seen_regs = Counter()
+            seen_regs_with_reg2mem = Counter()
+            workload: str = trace_path.parent.parent.parent.name
+            total = totals.setdefault(workload, [Counter(), Counter()])
+            for (
+                pc,
+                flags,
+                dst_regs,
+                op,
+                src_regs,
+                is_memory_op,
+                warp_id,
+            ) in find_reg2mem_opportunities(it, seen_regs, seen_regs_with_reg2mem):
+                pass
+                # if first:
+                #     print(f'{trace_path.parent.parent.parent.name}/{trace_path.name}/{warp_id}:')
+                #     first = False
+                # print(f'    {pc:x} {flags:x} {op} ({",".join(dst_regs)}) {",".join(src_regs)}')
+            regs0 = sum(seen_regs.values())
+            regs1 = sum(seen_regs_with_reg2mem.values())
+            #print(
+            #    f"{workload}: Saw {len(seen_regs)} registers, could limit to {len(seen_regs_with_reg2mem)} registers",
+            #    file=sys.stderr
+            #)
+            # print(
+            #    f"{workload}: Saw {regs0} register accesses, could limit to {regs1} register accesses ({100 - regs1 / regs0 * 100:.2f}%)",
+            #    file=sys.stderr
+            #)
+            total[0].update(seen_regs)
+            total[1].update(seen_regs_with_reg2mem)
+    return totals
 
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('base_path', type=Path)
-    args = parser.parse_args()
-    totals = {}
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("base_path", type=Path)
+    args = parser.parse_args()
+
+    totals = {}
+    values = []
     for trace_paths in discover_kernel_traces(args.base_path):
         for i, trace_path in enumerate(trace_paths):
-            with open(trace_path, 'r') as f:
-                print(f"Now processing {trace_path} ({i} of {len(trace_paths)} in this set) ...", file=sys.stderr)
-                for it in parse_trace(f):
-                    seen_regs = Counter()
-                    seen_regs_with_reg2mem = Counter()
-                    workload: str = trace_path.parent.parent.parent.name
-                    total = totals.setdefault(workload, [Counter(), Counter()])
-                    for pc, flags, dst_regs, op, src_regs, is_memory_op, warp_id in find_reg2mem_opportunities(it, seen_regs, seen_regs_with_reg2mem):
-                        pass
-                        # if first:
-                        #     print(f'{trace_path.parent.parent.parent.name}/{trace_path.name}/{warp_id}:')
-                        #     first = False
-                        # print(f'    {pc:x} {flags:x} {op} ({",".join(dst_regs)}) {",".join(src_regs)}')
-                    regs0 = sum(seen_regs.values())
-                    regs1 = sum(seen_regs_with_reg2mem.values())
-                    print(f"{workload}: Saw {len(seen_regs)} registers, could limit to {len(seen_regs_with_reg2mem)} registers")
-                    print(f"{workload}: Saw {regs0} register accesses, could limit to {regs1} register accesses ({100 - regs1 / regs0 * 100:.2f}%)")
-                    total[0].update(seen_regs)
-                    total[1].update(seen_regs_with_reg2mem)
+            values.append((i, trace_path, len(trace_paths)))
+
+    for result in process_map(run, values):
+        totals.update(result)
+
     for t in totals:
         ts = totals[t]
         regs0 = sum(ts[0].values())
@@ -137,5 +179,5 @@ def main():
         print(f"In total, {t}: {regs1} / {regs0} = {100 - regs1 / regs0 * 100:.2f}%")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

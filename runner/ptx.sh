@@ -1,9 +1,12 @@
 #!/bin/bash
+#bust
 
 if [ ! -n "$CUDA_INSTALL_PATH" ]; then
 	echo "ERROR ** Install CUDA Toolkit and set CUDA_INSTALL_PATH.";
 	exit;
 fi
+
+export NVIDIA_COMPUTE_SDK_LOCATION=$(realpath 4.2)
 
 #Make the simulator
 export PATH=$CUDA_INSTALL_PATH/bin:$PATH;
@@ -13,42 +16,117 @@ source ./gpu-simulator/setup_environment.sh
 mkdir /results
 
 source gpu-app-collection/src/setup_environment
-make rodinia_2.0-ft -j -C gpu-app-collection/src
+make -j -C gpu-app-collection/src \
+    rodinia-3.1 \
+    polybench \
+    parboil \
+    lonestargpu-2.0
 
-util/job_launching/run_simulations.py -B rodinia_2.0-ft -C RTX2060 -N rodinia_2.0-ft-ptx -n
+util/job_launching/run_simulations.py -B rodinia-3.1,polybench,parboil,lonestargpu-2.0 -C "RTX2060_S-${INSN_COUNT:-100M_INSN}${EXTRA_CONFIGS:-}" -N rodinia_2.0-ft-ptx -n
+
+p=$(($(nproc) - 4))
+echo "Running with $p processes!"
+sleep 1
+j=0
+i=0
+total=0
+
 for lin in sim_run_11.0/*; do
     case "$lin" in
+        # Not a useful dir.
+        *gpgpu-sim-builds*) continue
+            ;;
         # Streamcluster SIGSEGVs
         # BFS seems to never finish?
-        *streamcluster*|*bfs*) continue
+        *streamcluster*|*bfs*|*lonestar-dmr*) continue
+            ;;
+        *)
+            ;;
+    esac
+    total=$((total + 1))
+done
+
+echo -ne '\x1b[2J'
+
+scroll() {
+    echo -ne '\x1b[r'
+}
+
+limitscroll() {
+    echo -ne '\x1b[1;20r'
+}
+
+state() {
+    if [ "$1" -lt 3 ]; then
+        echo "$2"
+    fi
+    echo -ne '\x1b[s'
+    scroll
+    echo -ne '\x1b['$(expr 20 + $1)H
+    shift
+    echo -ne '\x1b[2K'
+    echo "$*"
+    limitscroll
+    echo -ne '\x1b[u'
+}
+
+limitscroll
+trap scroll EXIT
+
+declare -A ass
+
+for lin in sim_run_11.0/*; do
+    case "$lin" in
+        # Not a useful dir.
+        *gpgpu-sim-builds*) continue
+            ;;
+        # Streamcluster SIGSEGVs
+        # BFS seems to never finish?
+        *streamcluster*|*bfs*|*lonestar-dmr*) continue
             ;;
         *)
             ;;
     esac
     name=$(basename "$lin" | sed -e 's/-.*//')
+    i=$((i + 1))
 
-    # count=$(grep $name used-registers.xsv | awk 'END{printf "%d",($2*65536/$3)}')
-    # vcount=$(grep $name used-registers.xsv | awk 'END{printf "%d",($2*65536/$3)}')
+    (
+        for dir in "$lin"/*/*; do
+            start=$(date +%s)
+            pushd "$dir" || continue
+            mkdir with
+            bash slurm.sim > with/output 2>&1
+            cat with/output >> /results/$(basename "$lin")-with-output || true
+            cat gpgpusim_*power*.log >> /results/$(basename "$lin")-power-report || true
+            popd
+            end=$(date +%s)
+            state 1 "[done @ $((end - start)) sec] $(basename "$lin")" >&3
+        done
+    ) 3>&1 >/dev/null 2>&1 &
+    ass["$!"]="$name"
+    j=$((j + 1))
 
-    # count=$(grep $name regfile-vs-shmem-access.xsv | awk 'END{printf "%d",int(int((1+$4)*16)/4)*4+4}')
-
-    count=$(grep $name used-registers.xsv | awk 'END{printf "%d",($3*20/$2)}')
-
-    pushd $lin/*/* || continue
-
-    # sed -i -e "s/-gpgpu_shader_registers.*/-gpgpu_shader_registers $count/" gpgpusim.config
-    # sed -i -e "s/-gpgpu_registers_per_block.*/-gpgpu_registers_per_block $vcount/" gpgpusim.config
-
-    # sed -i -e "s/-gpgpu_num_reg_banks.*/-gpgpu_num_reg_banks $count/" gpgpusim.config
-
-    sed -i -e "s/-gpgpu_smem_latency.*/-gpgpu_smem_latency $count/" gpgpusim.config
-
-    mkdir with
-    bash slurm.sim 2>&1 | tee with/output
-    cp with/output /results/$(basename "$lin")-with-output
-    cp gpgpusim_*power*.log /results/$(basename "$lin")-power-report
-    popd
+    if [[ "$j" -ge "$p" ]]; then
+        wait -n
+        running=$(jobs -p)
+        j="$(echo "$running" | wc -l)"
+        state 2 "$(printf "%- 3d/%- 3d (running: %- 3d)" $i $total $j)"
+        cs=""
+        for a in $running; do
+            cs="${cs} ${ass["$a"]}";
+        done
+        state 3 "running$cs"
+    fi
 done
+
+echo "Waiting for $(jobs -p | wc -l) jobs to finish"
+cs=""
+for a in $(jobs -p); do
+    cs="${cs} ${ass["$a"]}";
+done
+state 3 "running$cs"
+
+wait
 
 # for line in sim_run_11.0/*; do
 #     cd $line/*/*;

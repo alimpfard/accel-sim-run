@@ -1,10 +1,13 @@
 generate(name) {
-    for x in $(glob "results-$name/*with-output") {
-        a=${split '-' $(basename $x)}
-        echo -n $a[0] "" >> $name-shmem
-        awk '$1~/gpgpu_n_shmem_insn/{a+=$3}END{print a}' $x >> $name-shmem
+    filename=$(basename $name)-loads
+    rm -f $filename
+    for x in $(glob "$name/*with-output") {
+        a=$(basename $x)
+        echo -n $a "" >> $filename
+        awk '$1~/gpgpu_n_load_insn/{a+=$3}END{print a}' $x >> $filename
     }
 }
 
-generate reg2mem
-generate vanilla
+for $* {
+    generate $it
+}
